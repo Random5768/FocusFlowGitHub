@@ -1,1 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+ android:layout_width="match_parent" android:layout_height="match_parent"
+ android:orientation="vertical" android:background="@color/bg">
+ <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
+   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
+    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+     <TextView android:text="Good evening 👋" android:textColor="@color/muted" android:textSize="14sp"/>
+     <TextView android:text="FocusFlow" android:textColor="@color/text" android:textSize="30sp" android:textStyle="bold"/>
+    </LinearLayout>
+    <TextView android:id="@+id/tvStreak" android:text="🔥 7 day streak" android:textColor="@color/cyan" android:textSize="14sp"/>
+   </LinearLayout>
 
+   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="22dp"
+    android:background="@color/card" android:padding="18dp" android:orientation="vertical">
+    <TextView android:text="TODAY'S FOCUS" android:textColor="@color/muted" android:textSize="12sp"/>
+    <TextView android:id="@+id/tvGoal" android:text="2h 30m / 4h goal" android:textColor="@color/text" android:textSize="25sp" android:textStyle="bold" android:layout_marginTop="5dp"/>
+    <ProgressBar android:id="@+id/progress" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="10dp" android:layout_marginTop="12dp" android:max="100" android:progress="62"/>
+   </LinearLayout>
+
+   <TextView android:text="Today's Routine" android:textColor="@color/text" android:textSize="20sp" android:textStyle="bold" android:layout_marginTop="25dp"/>
+   <LinearLayout android:id="@+id/taskContainer" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical"/>
+
+   <TextView android:text="Subjects & Topics" android:textColor="@color/text" android:textSize="20sp" android:textStyle="bold" android:layout_marginTop="24dp"/>
+   <LinearLayout android:id="@+id/subjectContainer" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical"/>
+
+   <TextView android:text="Quick Tools" android:textColor="@color/text" android:textSize="20sp" android:textStyle="bold" android:layout_marginTop="24dp"/>
+   <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+    <Button android:id="@+id/btnPomodoro" android:text="⏱ Pomodoro" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"/>
+    <Button android:id="@+id/btnAdd" android:text="+ Add Task" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"/>
+   </LinearLayout>
+  </LinearLayout>
+ </ScrollView>
+ <LinearLayout android:layout_width="match_parent" android:layout_height="70dp" android:background="@color/card"
+  android:gravity="center" android:orientation="horizontal">
+  <Button android:id="@+id/navHome" android:text="⌂
+Home" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"/>
+  <Button android:id="@+id/navCalendar" android:text="▣
+Calendar" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"/>
+  <Button android:id="@+id/navProgress" android:text="◔
+Progress" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"/>
+  <Button android:id="@+id/navNotes" android:text="✎
+Notes" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"/>
+ </LinearLayout>
+</LinearLayout>
