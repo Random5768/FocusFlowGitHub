@@ -3,223 +3,273 @@ package com.focusflow.planner;
 import android.app.*;
 import android.os.*;
 import android.content.*;
-import android.graphics.*;
+import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.view.*;
 import android.widget.*;
+import android.text.InputType;
+import android.util.Base64;
 import java.util.*;
 
 public class MainActivity extends Activity {
-    FocusView view;
-    android.content.SharedPreferences prefs;
-    ArrayList<Task> tasks = new ArrayList<>();
-    ArrayList<String> notes = new ArrayList<>();
-    int page = 0;
-    long pomEnd = 0;
-    boolean pomRunning = false;
-    Handler handler = new Handler(Looper.getMainLooper());
+    final int BG=Color.rgb(7,17,31), CARD=Color.rgb(13,29,49), CARD2=Color.rgb(17,41,67);
+    final int TEXT=Color.rgb(246,248,255), MUTED=Color.rgb(145,164,189), BLUE=Color.rgb(93,107,255);
+    final int CYAN=Color.rgb(42,214,232), GREEN=Color.rgb(31,211,154), ORANGE=Color.rgb(255,157,46);
+    final int PINK=Color.rgb(244,81,166), PURPLE=Color.rgb(155,92,255), LINE=Color.rgb(32,59,88);
 
-    static class Task {
-        String subject, topic, name, time, repeat, priority, status;
-        Task(String s,String t,String n,String tm,String r,String p,String st){
-            subject=s; topic=t; name=n; time=tm; repeat=r; priority=p; status=st;
-        }
-        String encode(){ return subject+"~"+topic+"~"+name+"~"+time+"~"+repeat+"~"+priority+"~"+status; }
-        static Task decode(String x){
-            String[] a=x.split("~",-1);
-            if(a.length<7)return null;
-            return new Task(a[0],a[1],a[2],a[3],a[4],a[5],a[6]);
-        }
+    LinearLayout content, root, nav;
+    SharedPreferences pref;
+    ArrayList<Topic> topics=new ArrayList<>();
+    ArrayList<Routine> routines=new ArrayList<>();
+    ArrayList<Target> targets=new ArrayList<>();
+    ArrayList<Task> tasks=new ArrayList<>();
+    Handler handler=new Handler(Looper.getMainLooper());
+    int page=0;
+    boolean pom=false; long pomEnd=0;
+
+    static class Topic {
+        String subject,name,chapter,note;
+        Topic(String s,String n,String c,String x){subject=s;name=n;chapter=c;note=x;}
+        String enc(){return e(subject)+"~"+e(name)+"~"+e(chapter)+"~"+e(note);}
+        static Topic dec(String s){String[] a=s.split("~",-1);return a.length==4?new Topic(d(a[0]),d(a[1]),d(a[2]),d(a[3])):null;}
     }
+    static class Routine {
+        String title,day,start,end,subject,topic,repeat;
+        Routine(String t,String d,String s,String e,String sub,String top,String r){title=t;day=d;start=s;end=e;subject=sub;topic=top;repeat=r;}
+        String enc(){return e(title)+"~"+e(day)+"~"+e(start)+"~"+e(end)+"~"+e(subject)+"~"+e(topic)+"~"+e(repeat);}
+        static Routine dec(String s){String[] a=s.split("~",-1);return a.length==7?new Routine(d(a[0]),d(a[1]),d(a[2]),d(a[3]),d(a[4]),d(a[5]),d(a[6])):null;}
+    }
+    static class Target {
+        String month,title,subject,goal,unit,done;
+        Target(String m,String t,String s,String g,String u,String d){month=m;title=t;subject=s;goal=g;unit=u;done=d;}
+        String enc(){return e(month)+"~"+e(title)+"~"+e(subject)+"~"+e(goal)+"~"+e(unit)+"~"+e(done);}
+        static Target dec(String s){String[] a=s.split("~",-1);return a.length==6?new Target(d(a[0]),d(a[1]),d(a[2]),d(a[3]),d(a[4]),d(a[5])):null;}
+    }
+    static class Task {
+        String subject,topic,name,start,end,status;
+        Task(String s,String t,String n,String a,String b,String st){subject=s;topic=t;name=n;start=a;end=b;status=st;}
+        String enc(){return e(subject)+"~"+e(topic)+"~"+e(name)+"~"+e(start)+"~"+e(end)+"~"+e(status);}
+        static Task dec(String s){String[] a=s.split("~",-1);return a.length==6?new Task(d(a[0]),d(a[1]),d(a[2]),d(a[3]),d(a[4]),d(a[5])):null;}
+    }
+
+    static String e(String s){return Base64.encodeToString(s.getBytes(java.nio.charset.StandardCharsets.UTF_8),Base64.NO_WRAP);}
+    static String d(String s){try{return new String(Base64.decode(s,Base64.NO_WRAP),java.nio.charset.StandardCharsets.UTF_8);}catch(Exception x){return s;}}
 
     @Override public void onCreate(Bundle b){
         super.onCreate(b);
-        getWindow().setStatusBarColor(Color.rgb(7,17,31));
-        getWindow().setNavigationBarColor(Color.rgb(7,17,31));
-        prefs=getSharedPreferences("focusflow2",0);
-        load();
-        view=new FocusView(this);
-        setContentView(view);
-        handler.postDelayed(new Runnable(){ public void run(){ if(pomRunning){ view.invalidate(); } handler.postDelayed(this,1000); }},1000);
+        getWindow().setStatusBarColor(BG); getWindow().setNavigationBarColor(BG);
+        pref=getSharedPreferences("focusflow_v4",0);
+        load(); shell(); show(0);
+        handler.post(new Runnable(){public void run(){
+            if(pom && System.currentTimeMillis()>=pomEnd){pom=false; Toast.makeText(MainActivity.this,"পোমোডোরো সম্পন্ন হয়েছে!",Toast.LENGTH_LONG).show();}
+            handler.postDelayed(this,1000);
+        }});
     }
 
     void load(){
-        String raw=prefs.getString("tasks","");
-        if(!raw.isEmpty()) for(String x:raw.split("\\|")){
-            Task t=Task.decode(x); if(t!=null) tasks.add(t);
+        read(pref.getString("topics",""),topics,0);
+        read(pref.getString("routines",""),routines,1);
+        read(pref.getString("targets",""),targets,2);
+        read(pref.getString("tasks",""),tasks,3);
+        if(topics.isEmpty()){
+            topics.add(new Topic("গণিত","বীজগণিত","অধ্যায় ৩","অসমতা ও সমীকরণ"));
+            topics.add(new Topic("পদার্থবিজ্ঞান","গতি","অধ্যায় ২","Numerical Practice"));
+            topics.add(new Topic("ইংরেজি","রচনা","অধ্যায় ১","Essay Writing"));
         }
+        if(routines.isEmpty()){
+            routines.add(new Routine("গণিত অনুশীলন","শনিবার","08:00 AM","10:00 AM","গণিত","বীজগণিত","সাপ্তাহিক"));
+            routines.add(new Routine("পদার্থবিজ্ঞান","রবিবার","10:30 AM","12:00 PM","পদার্থবিজ্ঞান","গতি","সাপ্তাহিক"));
+        }
+        if(targets.isEmpty()) targets.add(new Target("এপ্রিল ২০২৫","মাসিক পড়াশোনা লক্ষ্য","সব বিষয়","80","ঘণ্টা","34"));
         if(tasks.isEmpty()){
-            tasks.add(new Task("Mathematics","Algebra - Chapter 3","Solve Exercise 3.1 - 3.5","08:00 - 10:00","Daily","Medium","Completed"));
-            tasks.add(new Task("Physics","Motion","Numerical practice","10:30 - 12:00","Daily","High","In Progress"));
-            tasks.add(new Task("English","Essay","Write introduction","01:30 - 03:00","Daily","Low","Pending"));
-            tasks.add(new Task("Chemistry","Reactions","Reaction revision","04:00 - 05:00","Weekly","Medium","Pending"));
-            tasks.add(new Task("Review & Practice","Mixed","Daily revision","07:00 - 08:00","Daily","Medium","Pending"));
+            tasks.add(new Task("গণিত","বীজগণিত","অনুশীলনী ৩.১ - ৩.৫","08:00 AM","10:00 AM","সম্পন্ন"));
+            tasks.add(new Task("পদার্থবিজ্ঞান","গতি","গাণিতিক অনুশীলন","10:30 AM","12:00 PM","চলছে"));
+            tasks.add(new Task("ইংরেজি","রচনা","ভূমিকা লিখুন","01:30 PM","03:00 PM","অপেক্ষমাণ"));
+            tasks.add(new Task("রসায়ন","বিক্রিয়া","রিভিশন","04:00 PM","05:00 PM","অপেক্ষমাণ"));
         }
-        String ns=prefs.getString("notes","Algebra formulas|Physics important questions|English essay ideas|Chemistry reaction notes");
-        notes.addAll(Arrays.asList(ns.split("\\|")));
+    }
+
+    void read(String raw,ArrayList list,int type){
+        if(raw==null||raw.isEmpty())return;
+        for(String s:raw.split("\\|",-1)){
+            Object o=null;
+            if(type==0)o=Topic.dec(s); else if(type==1)o=Routine.dec(s); else if(type==2)o=Target.dec(s); else o=Task.dec(s);
+            if(o!=null)list.add(o);
+        }
     }
 
     void save(){
-        ArrayList<String> a=new ArrayList<>();
-        for(Task t:tasks)a.add(t.encode());
-        prefs.edit().putString("tasks",String.join("|",a)).putString("notes",String.join("|",notes)).apply();
+        ArrayList<String> a=new ArrayList<>();for(Topic x:topics)a.add(x.enc());pref.edit().putString("topics",String.join("|",a)).apply();
+        a.clear();for(Routine x:routines)a.add(x.enc());pref.edit().putString("routines",String.join("|",a)).apply();
+        a.clear();for(Target x:targets)a.add(x.enc());pref.edit().putString("targets",String.join("|",a)).apply();
+        a.clear();for(Task x:tasks)a.add(x.enc());pref.edit().putString("tasks",String.join("|",a)).apply();
     }
 
-    void addTaskDialog(){
-        LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(24,4,24,4);
-        EditText s=e("Subject", "Mathematics"); EditText topic=e("Topic","Algebra - Chapter 3");
-        EditText name=e("Task name","Solve Exercise 3.1 - 3.5"); EditText time=e("Time","08:00 - 10:00");
-        EditText repeat=e("Repeat","Daily"); EditText priority=e("Priority","Medium");
-        box.addView(s);box.addView(topic);box.addView(name);box.addView(time);box.addView(repeat);box.addView(priority);
-        new AlertDialog.Builder(this).setTitle("Add New Task").setView(box)
-            .setNegativeButton("Cancel",null).setPositiveButton("Save Task",(d,w)->{
-                tasks.add(new Task(s.getText().toString(),topic.getText().toString(),name.getText().toString(),
-                    time.getText().toString(),repeat.getText().toString(),priority.getText().toString(),"Pending"));
-                save(); view.invalidate();
-            }).show();
-    }
-    EditText e(String hint,String val){ EditText e=new EditText(this);e.setHint(hint);e.setText(val);e.setTextColor(Color.WHITE);e.setHintTextColor(Color.GRAY); return e; }
+    int dp(float n){return (int)(n*getResources().getDisplayMetrics().density+.5f);}
+    TextView tv(String s,float z,int c){TextView t=new TextView(this);t.setText(s);t.setTextSize(z);t.setTextColor(c);t.setGravity(Gravity.CENTER_VERTICAL);return t;}
+    TextView bold(String s,float z,int c){TextView t=tv(s,z,c);t.setTypeface(android.graphics.Typeface.DEFAULT,1);return t;}
+    GradientDrawable bg(int c,float r){GradientDrawable g=new GradientDrawable();g.setColor(c);g.setCornerRadius(dp(r));return g;}
+    GradientDrawable outline(int c,float r){GradientDrawable g=bg(c,r);g.setStroke(dp(1),LINE);return g;}
+    LinearLayout card(){LinearLayout x=new LinearLayout(this);x.setOrientation(LinearLayout.VERTICAL);x.setPadding(dp(14),dp(12),dp(14),dp(12));x.setBackground(outline(CARD,16));return x;}
+    LinearLayout row(){LinearLayout x=new LinearLayout(this);x.setOrientation(LinearLayout.HORIZONTAL);x.setGravity(Gravity.CENTER_VERTICAL);return x;}
+    void margin(View v,int l,int t,int r,int b){if(v.getLayoutParams()==null)v.setLayoutParams(new LinearLayout.LayoutParams(-1,-2));ViewGroup.MarginLayoutParams m=(ViewGroup.MarginLayoutParams)v.getLayoutParams();m.setMargins(dp(l),dp(t),dp(r),dp(b));}
+    EditText input(String hint,String value){EditText e=new EditText(this);e.setHint(hint);e.setHintTextColor(MUTED);e.setTextColor(TEXT);e.setText(value);e.setSingleLine();e.setBackground(outline(CARD2,12));e.setPadding(dp(12),0,dp(12),0);margin(e,0,5,0,5);return e;}
 
-    void notesDialog(){
-        LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(20,4,20,4);
-        EditText e=new EditText(this);e.setHint("Write a note...");e.setMinLines(5);e.setTextColor(Color.WHITE);box.addView(e);
-        new AlertDialog.Builder(this).setTitle("New Note").setView(box).setNegativeButton("Cancel",null).setPositiveButton("Save",(d,w)->{
-            String n=e.getText().toString().trim(); if(!n.isEmpty()){notes.add(0,n);save();view.invalidate();}
-        }).show();
+    void shell(){
+        root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(BG);
+        ScrollView sc=new ScrollView(this);content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);sc.addView(content);
+        root.addView(sc,new LinearLayout.LayoutParams(-1,0,1));
+        nav=new LinearLayout(this);nav.setOrientation(LinearLayout.HORIZONTAL);nav.setBackgroundColor(Color.rgb(8,21,36));nav.setGravity(Gravity.CENTER);
+        String[] n={"⌂\nহোম","▣\nরুটিন","◈\nটপিক","▦\nক্যালেন্ডার","◎\nফোকাস","▤\nনোট","◌\nটার্গেট","⚙\nসেটিংস"};
+        for(int i=0;i<n.length;i++){final int p=i;TextView b=tv(n[i],9,MUTED);b.setGravity(Gravity.CENTER);b.setOnClickListener(v->show(p));nav.addView(b,new LinearLayout.LayoutParams(0,dp(60),1));}
+        root.addView(nav,new LinearLayout.LayoutParams(-1,dp(65)));setContentView(root);
     }
 
-    void startPomodoro(){
-        pomEnd=System.currentTimeMillis()+25*60*1000; pomRunning=true; page=4; view.invalidate();
+    void show(int p){page=p;content.removeAllViews();if(p==0)home();else if(p==1)routine();else if(p==2)topicsPage();else if(p==3)calendar();else if(p==4)pomodoro();else if(p==5)notes();else if(p==6)targetsPage();else settings();}
+
+    void head(String title,String sub){
+        LinearLayout h=row();h.setPadding(dp(20),dp(18),dp(20),dp(8));
+        LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);l.addView(bold(title,24,TEXT));l.addView(tv(sub,11,MUTED));
+        h.addView(l,new LinearLayout.LayoutParams(0,-2,1));TextView g=tv("⚙",22,TEXT);g.setGravity(Gravity.CENTER);g.setBackground(bg(CARD,30));h.addView(g,new LinearLayout.LayoutParams(dp(54),dp(54)));content.addView(h);
     }
 
-    void taskDone(int i){ if(i>=0&&i<tasks.size()){tasks.get(i).status="Completed";save();view.invalidate();} }
-
-    class FocusView extends View {
-        Paint p=new Paint(3); float den; RectF r=new RectF();
-        int W,H;
-        int white=Color.rgb(245,248,255), muted=Color.rgb(143,162,186), bg=Color.rgb(7,17,31), card=Color.rgb(13,28,46), card2=Color.rgb(16,37,59);
-        int accent=Color.rgb(91,99,255), green=Color.rgb(33,211,155), orange=Color.rgb(255,159,47), pink=Color.rgb(245,78,162), purple=Color.rgb(155,98,255), cyan=Color.rgb(39,216,232);
-        FocusView(Context c){super(c);den=getResources().getDisplayMetrics().density;p.setTypeface(Typeface.create("sans",Typeface.NORMAL));setBackgroundColor(bg);}
-        float d(float x){return x*den;}
-        void rect(Canvas c,float l,float t,float rr,float bb,int color,float rad){p.setColor(color);p.setStyle(Paint.Style.FILL);r.set(d(l),d(t),d(rr),d(bb));c.drawRoundRect(r,d(rad),d(rad),p);}
-        void text(Canvas c,String s,float x,float y,float size,int color){p.setStyle(Paint.Style.FILL);p.setColor(color);p.setTextSize(d(size));p.setTypeface(Typeface.create("sans",Typeface.NORMAL));c.drawText(s,d(x),d(y),p);}
-        void bold(Canvas c,String s,float x,float y,float size,int color){p.setStyle(Paint.Style.FILL);p.setColor(color);p.setTextSize(d(size));p.setTypeface(Typeface.create("sans",Typeface.BOLD));c.drawText(s,d(x),d(y),p);}
-        void line(Canvas c,float x1,float y1,float x2,float y2,int color,float sw){p.setColor(color);p.setStrokeWidth(d(sw));c.drawLine(d(x1),d(y1),d(x2),d(y2),p);}
-        @Override protected void onDraw(Canvas c){
-            super.onDraw(c); W=getWidth();H=getHeight();
-            c.drawColor(bg);
-            if(page==0)home(c); else if(page==1)routine(c); else if(page==2)subjects(c); else if(page==3)calendar(c);
-            else if(page==4)pomodoro(c); else if(page==5)notesPage(c); else if(page==6)progress(c); else settings(c);
-            bottom(c);
-        }
-
-        void header(Canvas c,String title,String sub){
-            bold(c,title,22,34,22,white); text(c,sub,22,55,11,muted);
-            rect(c, W/den-62,15,W/den-20,57,card,22); text(c,"⚙",W/den-49,43,20,white);
-        }
-
-        void home(Canvas c){
-            header(c,"FocusFlow","Plan  •  Study  •  Grow");
-            text(c,"Good morning,",22,86,13,muted);bold(c,"Rafsan 👋",22,108,25,white);text(c,"Keep going! Your goals are closer than you think.",22,128,11,muted);
-            stat(c,22,145,120,218,"Today's Study","4h 30m","/ 8h goal",green);
-            stat(c,130,145,228,218,"Tasks","5 / 8","Completed",cyan);
-            stat(c,238,145,336,218,"Streak","12 days","",orange);
-            stat(c,346,145, W/den-22,218,"Total Study","132.5 h","",purple);
-            rect(c,22,232,W/den-22,450,card,14);bold(c,"Today's Routine",34,258,17,white);text(c,"View Full Routine →",W/den-135,258,10,cyan);
-            int y=276;
-            for(int i=0;i<Math.min(5,tasks.size());i++){Task t=tasks.get(i);row(c,34,y,t,i);y+=32;}
-            rect(c,22,464,W/den-22,548,card,14);bold(c,"Quick Actions",34,489,15,white);
-            action(c,34,501,"＋ Add Task",0);action(c,155,501,"⏱ Pomodoro",4);action(c,276,501,"📅 Calendar",3);
-        }
-
-        void stat(Canvas c,float l,float t,float rr,float bb,String a,String b,String sub,int color){
-            rect(c,l,t,rr,bb,card2,12);text(c,a,l+10,t+20,9,muted);bold(c,b,l+10,t+47,17,white);text(c,sub,l+10,t+62,8,muted);
-            p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(d(4));p.setColor(color);c.drawArc(new RectF(d(rr-39),d(t+14),d(rr-10),d(t+43)),-90,250,false,p);p.setStyle(Paint.Style.FILL);
-        }
-
-        void row(Canvas c,float x,float y,Task t,int i){
-            rect(c,x,y,W/den-34,y+28,card2,8);int col=i==0?green:i==1?cyan:i==2?pink:purple;rect(c,x+5,y+5,x+23,y+23,col,5);
-            text(c,t.time,x+29,y+13,9,white);text(c,t.subject,x+98,y+13,11,white);text(c,t.status,x+98,y+24,7,muted);
-            if(t.status.equals("Completed"))text(c,"✓",W/den-55,y+18,14,green);
-        }
-        void action(Canvas c,float x,float y,String s,int target){rect(c,x,y,x+105,y+37,card2,9);text(c,s,x+10,y+23,10,white);}
-
-        void routine(Canvas c){
-            header(c,"My Routine","Daily • Weekly • Monthly");
-            rect(c,22,72,W/den-22,112,card,20);rect(c,24,74,24+(W/den-50)/3,110,accent,18);text(c,"Daily",42,97,11,white);text(c,"Weekly",42+(W/den-50)/3,97,11,muted);text(c,"Monthly",42+2*(W/den-50)/3,97,11,muted);
-            rect(c,22,124,W/den-22,204,card,12);bold(c,"4h 30m",40,158,23,white);text(c,"Study Time",40,178,10,muted);text(c,"8h Daily Goal",170,158,11,muted);rect(c,170,168,W/den-42,177,card2,5);rect(c,170,168,170+(W/den-212)*.56f,177,green,5);
-            int y=216;for(int i=0;i<tasks.size();i++){row(c,22,y,tasks.get(i),i);y+=44;if(y>H/den-80)break;}
-            rect(c,22,H/den-86,W/den-22,H/den-32,accent,14);text(c,"＋  Add Task",W/den/2-42,H/den-52,14,white);
-        }
-
-        void subjects(Canvas c){
-            header(c,"Subjects & Topics","Track chapters and completion");
-            rect(c,22,72,W/den-22,110,card,12);text(c,"⌕  Search subject or topic...",36,97,11,muted);
-            String[] ss={"Mathematics","Physics","Chemistry","English"};int[] cc={green,orange,purple,pink};int y=124;
-            for(int i=0;i<ss.length;i++){rect(c,22,y,W/den-22,y+76,card,12);rect(c,34,y+14,66,y+46,cc[i],8);bold(c,ss[i],78,y+27,14,white);text(c,(6-i)+" topics   •   "+(8-i)+"/12 completed",78,y+46,10,muted);rect(c,78,y+56,W/den-38,y+61,card2,3);rect(c,78,y+56,78+(W/den-116)*(0.67f-i*.12f),y+61,cc[i],3);text(c,(67-i*9)+"%",W/den-58,y+28,11,white);y+=88;}
-        }
-
-        void calendar(Canvas c){
-            header(c,"Calendar","21 - 27 Apr 2025");
-            rect(c,22,72,W/den-22,118,card,18);text(c,"Day",48,99,11,muted);bold(c,"Week",145,99,11,white);text(c,"Month",245,99,11,muted);
-            rect(c,22,130,W/den-22,570,card,12);String[] days={"Mon","Tue","Wed","Thu","Fri","Sat","Sun"};for(int i=0;i<7;i++){text(c,days[i],31+i*47,158,9,muted);text(c,""+(21+i),35+i*47,178,10,white);}
-            for(int h=0;h<6;h++){text(c,(8+h*2)+":00",26,214+h*57,8,muted);line(c,72,205+h*57,W/den-30,205+h*57,Color.rgb(25,48,68),1);}
-            block(c,80,208,"Math  2h",green);block(c,128,208,"Math  2h",green);block(c,80,266,"Physics 1.5h",orange);block(c,128,266,"Physics 1.5h",orange);block(c,176,323,"English 1.5h",pink);block(c,224,380,"Chemistry 1h",purple);
-        }
-        void block(Canvas c,float x,float y,String s,int color){rect(c,x,y,x+43,y+48,color,6);text(c,s,x+3,y+19,7,Color.WHITE);}
-
-        void progress(Canvas c){
-            header(c,"Progress & Analytics","Overview • Subject-wise • Time Analysis");
-            rect(c,22,72,W/den-22,114,card,20);rect(c,24,74,24+(W/den-50)/3,112,accent,18);text(c,"Overview",42,99,10,white);text(c,"Subject-wise",130,99,10,muted);text(c,"Time Analysis",230,99,10,muted);
-            stat(c,22,128,(W/den)/2-8,202,"Total Study","132.5 h","+12%",green);stat(c,(W/den)/2+4,128,W/den-22,202,"Daily Average","4.2 h","+0.8 h",cyan);
-            rect(c,22,216,W/den-22,410,card,12);bold(c,"Subject Performance",36,244,15,white);text(c,"Mathematics   34%",54,279,11,white);text(c,"Physics       22%",54,305,11,white);text(c,"Chemistry     18%",54,331,11,white);text(c,"English       16%",54,357,11,white);text(c,"Others        10%",54,383,11,muted);
-            p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(d(18));int[] cs={green,orange,purple,pink,cyan};float start=-90;float[] vals={.34f,.22f,.18f,.16f,.10f};for(int i=0;i<5;i++){p.setColor(cs[i]);c.drawArc(new RectF(d(W/den-145),d(265),d(W/den-65),d(345)),start,360*vals[i],false,p);start+=360*vals[i];}p.setStyle(Paint.Style.FILL);
-            rect(c,22,424,W/den-22,560,card,12);bold(c,"Weekly Study Hours",36,450,15,white);for(int i=0;i<7;i++){float bh=25+(i%4)*16;rect(c,40+i*43,530-bh,61+i*43,530,accent,4);text(c,""+(4+i%4)+"h",42+i*43,520-bh,8,muted);}
-        }
-
-        void pomodoro(Canvas c){
-            header(c,"Pomodoro","Focus • Short Break • Long Break");
-            float cx=W/den/2, cy=245; p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(d(10));p.setColor(Color.rgb(47,55,130));c.drawCircle(d(cx),d(cy),d(105),p);p.setColor(accent);c.drawArc(new RectF(d(cx-105),d(cy-105),d(cx+105),d(cy+105)),-90,250,false,p);p.setStyle(Paint.Style.FILL);
-            long left=pomRunning?Math.max(0,pomEnd-System.currentTimeMillis()):25*60*1000;long sec=left/1000;String tm=String.format(Locale.US,"%02d:%02d",sec/60,sec%60);text(c,"Focus Time",cx-38,cy-20,13,muted);bold(c,tm,cx-48,cy+22,30,white);
-            rect(c,cx-35,cy+50,cx+35,cy+88,accent,19);text(c,pomRunning?"❚❚":"▶",cx-10,cy+76,16,white);
-            option(c,120,390,"Focus Time","25 minutes");option(c,120,440,"Short Break","5 minutes");option(c,120,490,"Long Break","15 minutes");
-            if(pomRunning && left==0){pomRunning=false;Toast.makeText(MainActivity.this,"Pomodoro complete!",Toast.LENGTH_LONG).show();}
-        }
-        void option(Canvas c,float x,float y,String a,String b){rect(c,x,y,W/den-50,y+38,card,10);text(c,a,x+12,y+24,11,white);text(c,b,W/den-115,y+24,9,muted);}
-
-        void notesPage(Canvas c){
-            header(c,"Notes","Study • Work • Personal");
-            rect(c,22,72,W/den-22,110,card,12);text(c,"⌕  Search notes...",36,97,11,muted);
-            int y=124;for(int i=0;i<notes.size();i++){rect(c,22,y,W/den-22,y+58,card,11);rect(c,34,y+13,60,y+39,i%2==0?green:orange,6);bold(c,notes.get(i),72,y+25,12,white);text(c,"Study  •  Today",72,y+43,8,muted);y+=70;}
-            rect(c,W/den-70,H/den-92,W/den-22,H/den-44,accent,24);text(c,"+",W/den-54,H/den-61,24,white);
-        }
-
-        void settings(Canvas c){
-            header(c,"Profile & Settings","Rafsan Ahmed");
-            rect(c,22,72,W/den-22,145,card,14);bold(c,"Rafsan Ahmed",40,101,17,white);text(c,"rafasan@focusflow.com",40,121,10,muted);
-            option(c,22,160,"Theme","Dark Mode");option(c,22,208,"Notifications","On");option(c,22,256,"Sync with Google Calendar","On");option(c,22,304,"Data Backup","Last sync: Today");option(c,22,352,"App Version","2.0");rect(c,22,414,W/den-22,458,card,12);text(c,"Log Out",40,442,12,Color.RED);
-        }
-
-        void bottom(Canvas c){
-            float y=H/den-58;rect(c,0,y,W/den,H/den,Color.rgb(8,20,34),0);String[] a={"⌂ Home","▣ Routine","◈ Subjects","▦ Calendar","◎ Focus","◫ Notes","◉ Progress","⚙ Settings"};
-            float w=W/den/a.length;for(int i=0;i<a.length;i++){int col=i==page?white:muted;text(c,a[i],i*w+8,y+34,8,col);}
-        }
-
-        @Override public boolean onTouchEvent(android.view.MotionEvent e){
-            if(e.getAction()!=MotionEvent.ACTION_UP)return true;
-            float x=e.getX()/den,y=e.getY()/den;
-            if(y>H/den-70){
-                int idx=(int)(x/(W/den/8)); if(idx>=0&&idx<8){page=idx;invalidate();return true;}
-            }
-            if(page==0){
-                if(y>490&&y<545&&x<145){addTaskDialog();return true;}
-                if(y>490&&y<545&&x<270){startPomodoro();return true;}
-                if(y>490&&y<545&&x>270){page=3;invalidate();return true;}
-                if(y>276&&y<450){int i=(int)((y-276)/32); if(i<tasks.size())taskDone(i);}
-            } else if(page==4 && y>290&&y<370){ if(!pomRunning)startPomodoro(); else {pomRunning=false;invalidate();} }
-            else if(page==5 && y>H/den-120){notesDialog();}
-            else if(page==1 && y>H/den-120){addTaskDialog();}
-            return true;
-        }
+    void section(String title,String action,View.OnClickListener l){
+        LinearLayout h=row();h.setPadding(dp(20),dp(9),dp(20),dp(8));h.addView(bold(title,18,TEXT),new LinearLayout.LayoutParams(0,-2,1));
+        TextView a=tv(action,10,CYAN);if(l!=null)a.setOnClickListener(l);h.addView(a);content.addView(h);
     }
+
+    void home(){
+        head("ফোকাসফ্লো","পরিকল্পনা  •  পড়াশোনা  •  উন্নতি");
+        LinearLayout hi=new LinearLayout(this);hi.setOrientation(LinearLayout.VERTICAL);hi.setPadding(dp(20),dp(8),dp(20),dp(12));
+        hi.addView(tv("শুভ সকাল,",14,MUTED));hi.addView(bold("রাফসান 👋",30,TEXT));hi.addView(tv("আজকের লক্ষ্যগুলো শেষ করি!",12,MUTED));content.addView(hi);
+
+        LinearLayout stats=row();stats.setPadding(dp(20),0,dp(12),dp(8));content.addView(stats);
+        stat(stats,"আজকের পড়াশোনা","৪ ঘণ্টা ৩০ মিনিট","/ ৮ ঘণ্টা",GREEN);
+        stat(stats,"কাজ","৫ / ৮","সম্পন্ন",CYAN);
+        stat(stats,"ধারাবাহিকতা","১২ দিন","",ORANGE);
+        stat(stats,"মাসিক লক্ষ্য","৩৪ / ৮০ ঘণ্টা","৪২.৫%",PURPLE);
+
+        section("আজকের রুটিন","সব দেখুন →",v->show(1));
+        LinearLayout c=card();margin(c,20,0,20,14);for(int i=0;i<tasks.size();i++)task(c,tasks.get(i),i);content.addView(c);
+
+        section("দ্রুত কাজ","",null);
+        LinearLayout q=row();q.setPadding(dp(20),0,dp(20),dp(15));content.addView(q);
+        quick(q,"＋\nনতুন কাজ",()->taskDialog());
+        quick(q,"＋\nনতুন রুটিন",()->routineDialog());
+        quick(q,"🎯\nমাসিক লক্ষ্য",()->targetDialog());
+    }
+
+    void stat(LinearLayout p,String a,String b,String c,int color){
+        LinearLayout x=card();x.setPadding(dp(10),dp(8),dp(10),dp(8));x.setMinimumWidth(dp(132));
+        x.addView(tv(a,9,MUTED));x.addView(bold(b,17,TEXT));x.addView(tv(c,9,color));p.addView(x,new LinearLayout.LayoutParams(0,dp(94),1));((ViewGroup.MarginLayoutParams)x.getLayoutParams()).setMargins(0,0,dp(6),0);
+    }
+    void quick(LinearLayout p,String s,final Runnable r){TextView b=tv(s,11,TEXT);b.setGravity(Gravity.CENTER);b.setBackground(outline(CARD,14));b.setOnClickListener(v->r.run());p.addView(b,new LinearLayout.LayoutParams(0,dp(70),1));((ViewGroup.MarginLayoutParams)b.getLayoutParams()).setMargins(dp(3),0,dp(3),0);}
+
+    void task(LinearLayout p,Task t,int i){
+        LinearLayout r=row();r.setPadding(dp(7),dp(6),dp(7),dp(6));r.setBackground(bg(CARD2,10));
+        TextView dot=tv(i==0?"✓":"○",17,i==0?GREEN:MUTED);dot.setGravity(Gravity.CENTER);r.addView(dot,new LinearLayout.LayoutParams(dp(30),dp(52)));
+        LinearLayout m=new LinearLayout(this);m.setOrientation(LinearLayout.VERTICAL);m.addView(tv(t.start+" - "+t.end,10,TEXT));m.addView(bold(t.subject,13,TEXT));m.addView(tv(t.topic,9,MUTED));r.addView(m,new LinearLayout.LayoutParams(0,dp(52),1));
+        r.addView(tv(t.status,9,t.status.equals("সম্পন্ন")?GREEN:(t.status.equals("চলছে")?CYAN:MUTED)),new LinearLayout.LayoutParams(dp(65),dp(45)));
+        r.setOnClickListener(v->taskMenu(t));p.addView(r,new LinearLayout.LayoutParams(-1,dp(62)));((ViewGroup.MarginLayoutParams)r.getLayoutParams()).setMargins(0,0,0,dp(5));
+    }
+
+    void routine(){
+        head("আমার রুটিন","দৈনিক  •  সাপ্তাহিক  •  মাসিক");
+        LinearLayout tabs=row();tabs.setPadding(dp(20),dp(7),dp(20),dp(10));content.addView(tabs);
+        for(String s:new String[]{"দৈনিক","সাপ্তাহিক","মাসিক"}){TextView b=tv(s,11,TEXT);b.setGravity(Gravity.CENTER);b.setBackground(bg(s.equals("দৈনিক")?BLUE:CARD,18));tabs.addView(b,new LinearLayout.LayoutParams(0,dp(42),1));}
+        TextView info=tv("নিজের সময় অনুযায়ী রুটিন বানান। প্রতিদিন বা সপ্তাহের নির্দিষ্ট দিনে আলাদা রুটিন রাখা যাবে।",11,MUTED);margin(info,20,0,20,10);content.addView(info);
+        for(int i=0;i<routines.size();i++)routineCard(routines.get(i),i);
+        TextView add=tv("＋  নতুন রুটিন তৈরি করুন",14,TEXT);add.setGravity(Gravity.CENTER);add.setBackground(bg(BLUE,15));add.setOnClickListener(v->routineDialog());margin(add,20,10,20,20);add.setPadding(0,dp(14),0,dp(14));content.addView(add);
+    }
+
+    void routineCard(Routine r,int idx){
+        LinearLayout c=card();margin(c,20,0,20,8);LinearLayout h=row();h.addView(bold(r.title,14,TEXT),new LinearLayout.LayoutParams(0,-2,1));h.addView(tv(r.day,10,CYAN));c.addView(h);
+        c.addView(tv(r.start+" - "+r.end+"   •   "+r.subject+"   •   "+r.topic,10,MUTED));
+        c.addView(tv("পুনরাবৃত্তি: "+r.repeat,9,ORANGE));
+        c.setOnClickListener(v->routineMenu(idx));content.addView(c);
+    }
+
+    void topicsPage(){
+        head("আমার টপিক","নিজের ইচ্ছামতো বিষয়, অধ্যায় ও টপিক তৈরি করুন");
+        TextView info=tv("যে কোনো Subject → Topic → Chapter নিজের মতো লিখে Save করুন।",11,MUTED);margin(info,20,2,20,10);content.addView(info);
+        for(int i=0;i<topics.size();i++){final int k=i;Topic x=topics.get(i);LinearLayout c=card();margin(c,20,0,20,8);LinearLayout h=row();h.addView(bold(x.subject,15,TEXT),new LinearLayout.LayoutParams(0,-2,1));TextView del=tv("⋮",20,MUTED);h.addView(del,new LinearLayout.LayoutParams(dp(35),dp(35)));c.addView(h);c.addView(tv("📘 "+x.name+"   •   "+x.chapter,11,CYAN));c.addView(tv(x.note,9,MUTED));c.setOnClickListener(v->topicMenu(k));content.addView(c);}
+        TextView add=tv("＋  নিজের টপিক যোগ করুন",14,TEXT);add.setGravity(Gravity.CENTER);add.setBackground(bg(BLUE,15));add.setOnClickListener(v->topicDialog());margin(add,20,10,20,20);add.setPadding(0,dp(14),0,dp(14));content.addView(add);
+    }
+
+    void calendar(){
+        head("ক্যালেন্ডার","তোমার Daily & Weekly routine একসাথে");
+        LinearLayout c=card();margin(c,20,0,20,12);c.addView(bold("এপ্রিল ২০২৫",16,TEXT));c.addView(tv("সোম   মঙ্গল   বুধ   বৃহস্পতি   শুক্র   শনি   রবি",9,MUTED));c.addView(tv("  ২১      ২২      ২৩        ২৪        ২৫      ২৬      ২৭",12,TEXT));content.addView(c);
+        for(Routine r:routines){LinearLayout x=card();margin(x,20,0,20,7);x.addView(bold(r.day+"  •  "+r.start+" - "+r.end,12,TEXT));x.addView(tv(r.subject+"  •  "+r.topic,10,CYAN));content.addView(x);}
+    }
+
+    void pomodoro(){
+        head("পোমোডোরো","ফোকাস  •  ছোট বিরতি  •  দীর্ঘ বিরতি");
+        LinearLayout c=card();margin(c,20,12,20,14);c.setGravity(Gravity.CENTER_HORIZONTAL);
+        TextView timer=bold(time(),34,TEXT);timer.setGravity(Gravity.CENTER);timer.setBackground(outline(CARD2,120));c.addView(timer,new LinearLayout.LayoutParams(dp(210),dp(210)));
+        c.addView(tv(pom?"ফোকাস সেশন চলছে":"ফোকাস সময়",12,MUTED));
+        Button b=new Button(this);b.setText(pom?"বিরতি দিন":"ফোকাস শুরু করুন");b.setTextColor(TEXT);b.setBackground(bg(BLUE,14));b.setOnClickListener(v->{if(pom)pom=false;else{pom=true;pomEnd=System.currentTimeMillis()+25*60*1000;}show(4);});c.addView(b,new LinearLayout.LayoutParams(dp(170),dp(50)));content.addView(c);
+        String[][] a={{"ফোকাস সময়","২৫ মিনিট"},{"ছোট বিরতি","৫ মিনিট"},{"দীর্ঘ বিরতি","১৫ মিনিট"}};for(String[] z:a){LinearLayout x=card();margin(x,20,0,20,7);LinearLayout r=row();r.addView(tv(z[0],12,TEXT),new LinearLayout.LayoutParams(0,-2,1));r.addView(tv(z[1],10,MUTED));x.addView(r);content.addView(x);}
+    }
+    String time(){long l=pom?Math.max(0,pomEnd-System.currentTimeMillis()):1500000;return String.format(Locale.US,"%02d:%02d",l/60000,(l/1000)%60);}
+
+    void notes(){
+        head("নোট","পড়াশোনা  •  কাজ  •  ব্যক্তিগত");
+        TextView add=tv("＋  নতুন নোট",13,TEXT);add.setGravity(Gravity.CENTER);add.setBackground(bg(BLUE,14));add.setOnClickListener(v->noteDialog());margin(add,20,4,20,10);add.setPadding(0,dp(13),0,dp(13));content.addView(add);
+        String[] ns={"বীজগণিতের সূত্র","পদার্থবিজ্ঞানের গুরুত্বপূর্ণ প্রশ্ন","ইংরেজি রচনার আইডিয়া","রসায়নের বিক্রিয়া নোট"};for(String n:ns){LinearLayout c=card();margin(c,20,0,20,7);c.addView(bold(n,13,TEXT));c.addView(tv("আজ  •  পড়াশোনা",9,MUTED));content.addView(c);}
+    }
+
+    void targetsPage(){
+        head("মাসিক লক্ষ্য","এই মাসে কী অর্জন করতে চাও সেট করুন");
+        LinearLayout summary=card();margin(summary,20,0,20,12);summary.addView(bold("এপ্রিল ২০২৫",16,TEXT));summary.addView(tv("মোট লক্ষ্য ৮০ ঘণ্টা  •  সম্পন্ন ৩৪ ঘণ্টা",11,MUTED));ProgressBar pb=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);pb.setMax(80);pb.setProgress(34);summary.addView(pb,new LinearLayout.LayoutParams(-1,dp(8)));summary.addView(tv("৪২.৫% সম্পন্ন",10,GREEN));content.addView(summary);
+        for(int i=0;i<targets.size();i++){final int k=i;Target t=targets.get(i);LinearLayout c=card();margin(c,20,0,20,8);LinearLayout h=row();h.addView(bold(t.title,14,TEXT),new LinearLayout.LayoutParams(0,-2,1));h.addView(tv(t.done+" / "+t.goal+" "+t.unit,11,CYAN));c.addView(h);c.addView(tv(t.subject+"  •  "+t.month,9,MUTED));ProgressBar p=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);p.setMax(Integer.parseInt(t.goal));p.setProgress(Math.min(Integer.parseInt(t.goal),Integer.parseInt(t.done)));c.addView(p,new LinearLayout.LayoutParams(-1,dp(8)));c.setOnClickListener(v->targetMenu(k));content.addView(c);}
+        TextView add=tv("＋  নতুন মাসিক লক্ষ্য",14,TEXT);add.setGravity(Gravity.CENTER);add.setBackground(bg(BLUE,15));add.setOnClickListener(v->targetDialog());margin(add,20,10,20,20);add.setPadding(0,dp(14),0,dp(14));content.addView(add);
+    }
+
+    void settings(){
+        head("সেটিংস","প্রোফাইল ও অ্যাপ সেটিংস");
+        String[][] a={{"প্রোফাইল","রাফসান আহমেদ"},{"থিম","ডার্ক মোড"},{"নোটিফিকেশন","চালু"},{"গুগল ক্যালেন্ডার","বন্ধ"},{"ডাটা ব্যাকআপ","আজ সিঙ্ক হয়েছে"},{"অ্যাপ ভার্সন","৪.০"}};for(String[] z:a){LinearLayout c=card();margin(c,20,0,20,7);LinearLayout r=row();r.addView(tv(z[0],12,TEXT),new LinearLayout.LayoutParams(0,-2,1));r.addView(tv(z[1],10,MUTED));c.addView(r);content.addView(c);}
+    }
+
+    void topicDialog(){
+        LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(dp(16),0,dp(16),0);
+        EditText s=input("বিষয় যেমন: গণিত",""),n=input("টপিক যেমন: বীজগণিত",""),c=input("অধ্যায় যেমন: অধ্যায় ৩",""),note=input("নোট / বর্ণনা","");
+        box.addView(s);box.addView(n);box.addView(c);box.addView(note);
+        new AlertDialog.Builder(this).setTitle("নিজের টপিক তৈরি করুন").setView(box).setNegativeButton("বাতিল",null).setPositiveButton("টপিক সেভ করুন",(d,w)->{if(n.getText().toString().trim().isEmpty())return;topics.add(new Topic(s.getText().toString().trim(),n.getText().toString().trim(),c.getText().toString().trim(),note.getText().toString().trim()));save();show(2);}).show();
+    }
+
+    void topicMenu(int i){
+        new AlertDialog.Builder(this).setTitle(topics.get(i).name).setMessage("বিষয়: "+topics.get(i).subject+"\nঅধ্যায়: "+topics.get(i).chapter+"\n"+topics.get(i).note)
+        .setPositiveButton("সম্পাদনা",(d,w)->topicEdit(i)).setNegativeButton("মুছে ফেলুন",(d,w)->{topics.remove(i);save();show(2);}).show();
+    }
+    void topicEdit(int i){
+        Topic old=topics.get(i);LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(dp(16),0,dp(16),0);
+        EditText s=input("বিষয়",old.subject),n=input("টপিক",old.name),c=input("অধ্যায়",old.chapter),note=input("নোট",old.note);box.addView(s);box.addView(n);box.addView(c);box.addView(note);
+        new AlertDialog.Builder(this).setTitle("টপিক সম্পাদনা").setView(box).setNegativeButton("বাতিল",null).setPositiveButton("সেভ",(d,w)->{topics.set(i,new Topic(s.getText().toString(),n.getText().toString(),c.getText().toString(),note.getText().toString()));save();show(2);}).show();
+    }
+
+    void routineDialog(){
+        LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(dp(16),0,dp(16),0);
+        EditText title=input("রুটিনের নাম","সকালের পড়াশোনা"),day=input("দিন: প্রতিদিন / শনিবার / রবিবার","প্রতিদিন"),start=input("শুরুর সময়","08:00 AM"),end=input("শেষের সময়","10:00 AM"),subject=input("বিষয়","গণিত"),topic=input("টপিক","বীজগণিত"),repeat=input("পুনরাবৃত্তি","দৈনিক");
+        box.addView(title);box.addView(day);box.addView(start);box.addView(end);box.addView(subject);box.addView(topic);box.addView(repeat);
+        new AlertDialog.Builder(this).setTitle("Daily / Weekly রুটিন তৈরি করুন").setView(box).setNegativeButton("বাতিল",null).setPositiveButton("রুটিন সেভ করুন",(d,w)->{routines.add(new Routine(title.getText().toString(),day.getText().toString(),start.getText().toString(),end.getText().toString(),subject.getText().toString(),topic.getText().toString(),repeat.getText().toString()));save();show(1);}).show();
+    }
+    void routineMenu(int i){new AlertDialog.Builder(this).setTitle(routines.get(i).title).setMessage("দিন: "+routines.get(i).day+"\nসময়: "+routines.get(i).start+" - "+routines.get(i).end+"\n"+routines.get(i).subject+" • "+routines.get(i).topic).setNegativeButton("মুছে ফেলুন",(d,w)->{routines.remove(i);save();show(1);}).setPositiveButton("ঠিক আছে",null).show();}
+
+    void targetDialog(){
+        LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(dp(16),0,dp(16),0);
+        EditText month=input("মাস","মে ২০২৫"),title=input("লক্ষ্যের নাম","এই মাসে ৮০ ঘণ্টা পড়াশোনা"),subject=input("বিষয় / সব বিষয়","সব বিষয়"),goal=input("টার্গেট সংখ্যা","80"),unit=input("ইউনিট: ঘণ্টা / টপিক / অধ্যায়","ঘণ্টা"),done=input("ইতিমধ্যে কত হয়েছে","0");
+        box.addView(month);box.addView(title);box.addView(subject);box.addView(goal);box.addView(unit);box.addView(done);
+        new AlertDialog.Builder(this).setTitle("মাসিক লক্ষ্য সেট করুন").setView(box).setNegativeButton("বাতিল",null).setPositiveButton("লক্ষ্য সেভ করুন",(d,w)->{targets.add(new Target(month.getText().toString(),title.getText().toString(),subject.getText().toString(),goal.getText().toString(),unit.getText().toString(),done.getText().toString()));save();show(6);}).show();
+    }
+    void targetMenu(int i){Target t=targets.get(i);new AlertDialog.Builder(this).setTitle(t.title).setMessage(t.done+" / "+t.goal+" "+t.unit+"\nবিষয়: "+t.subject).setPositiveButton("অগ্রগতি আপডেট",(d,w)->targetUpdate(i)).setNegativeButton("মুছে ফেলুন",(d,w)->{targets.remove(i);save();show(6);}).show();}
+    void targetUpdate(int i){EditText e=input("বর্তমান অগ্রগতি",targets.get(i).done);new AlertDialog.Builder(this).setTitle("অগ্রগতি আপডেট করুন").setView(e).setNegativeButton("বাতিল",null).setPositiveButton("সেভ",(d,w)->{targets.get(i).done=e.getText().toString();save();show(6);}).show();}
+
+    void taskDialog(){
+        LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(dp(16),0,dp(16),0);
+        EditText s=input("বিষয়","গণিত"),t=input("টপিক","বীজগণিত"),n=input("কাজের নাম","অনুশীলনী সমাধান"),a=input("শুরুর সময়","08:00 AM"),b=input("শেষের সময়","10:00 AM");
+        box.addView(s);box.addView(t);box.addView(n);box.addView(a);box.addView(b);
+        new AlertDialog.Builder(this).setTitle("নতুন কাজ যোগ করুন").setView(box).setNegativeButton("বাতিল",null).setPositiveButton("সেভ",(d,w)->{tasks.add(new Task(s.getText().toString(),t.getText().toString(),n.getText().toString(),a.getText().toString(),b.getText().toString(),"অপেক্ষমাণ"));save();show(page);}).show();
+    }
+    void taskMenu(Task t){new AlertDialog.Builder(this).setTitle(t.subject+" • "+t.topic).setMessage(t.name+"\n"+t.start+" - "+t.end).setPositiveButton("সম্পন্ন করুন",(d,w)->{t.status="সম্পন্ন";save();show(page);}).setNegativeButton("মুছে ফেলুন",(d,w)->{tasks.remove(t);save();show(page);}).show();}
+    void noteDialog(){EditText e=input("নোট লিখুন","");e.setSingleLine(false);e.setMinLines(5);new AlertDialog.Builder(this).setTitle("নতুন নোট").setView(e).setNegativeButton("বাতিল",null).setPositiveButton("সেভ",(d,w)->Toast.makeText(this,"নোট সেভ হয়েছে",Toast.LENGTH_SHORT).show()).show();}
 }
