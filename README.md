@@ -1,22 +1,22 @@
-# FocusFlow — Native Android
+# ফোকাসফ্লো v4
 
-Advanced study/work routine planner inspired by the provided dark UI concept.
+বাংলা FocusFlow planner — reference design + real planner features.
 
-## Features
-- Dashboard with focus goal and streak
-- Daily routine with completion
-- Add routine: subject, topic, time
-- Subjects & topics
-- Weekly calendar
-- Progress analytics
+### নতুন core features
+- নিজের ইচ্ছামতো Subject / Topic / Chapter তৈরি
+- Topic edit/delete
+- Daily routine তৈরি
+- Weekly routine তৈরি
+- নির্দিষ্ট দিন + সময় সেট করা
+- Monthly target তৈরি
+- Target unit: ঘণ্টা / টপিক / অধ্যায়
+- Monthly target progress update
+- Dashboard-এ monthly target summary
+- Task add / complete / delete
 - Pomodoro
-- Notes
-- Offline local storage
+- Calendar
+- বাংলা UI
+- Local persistence
 - GitHub Actions APK build
 
-## Build from GitHub
-1. Upload this project to a GitHub repository.
-2. Push to `main`, or open **Actions → Build FocusFlow APK → Run workflow**.
-3. Open the workflow run and download the **FocusFlow-debug-apk** artifact.
-
-No npm, React, Vite, or Capacitor is required.
+কোনো npm / React / Vite / Capacitor নেই।
