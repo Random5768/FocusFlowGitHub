@@ -97,7 +97,7 @@ public class MainActivity extends Activity {
     class FocusView extends View {
         Paint p=new Paint(3); float den; RectF r=new RectF();
         int W,H;
-        int white=Color.rgb(245,248,255), muted=Color.rgb(143,162,186), bg=Color.rgb(7,17,31), card=Color.rgb(13,28,46);
+        int white=Color.rgb(245,248,255), muted=Color.rgb(143,162,186), bg=Color.rgb(7,17,31), card=Color.rgb(13,28,46), card2=Color.rgb(16,37,59);
         int accent=Color.rgb(91,99,255), green=Color.rgb(33,211,155), orange=Color.rgb(255,159,47), pink=Color.rgb(245,78,162), purple=Color.rgb(155,98,255), cyan=Color.rgb(39,216,232);
         FocusView(Context c){super(c);den=getResources().getDisplayMetrics().density;p.setTypeface(Typeface.create("sans",Typeface.NORMAL));setBackgroundColor(bg);}
         float d(float x){return x*den;}
